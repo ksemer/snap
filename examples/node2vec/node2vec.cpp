@@ -2,11 +2,13 @@
 
 #include "n2v.h"
 
+#include <map>
+
 #ifdef USE_OPENMP
 #include <omp.h>
 #endif
 
-void ParseArgs(int& argc, char* argv[], TStr& InFile, TStr& OutFile,
+void ParseArgs(int& argc, char* argv[], TStr& InFile, TStr& InGroupFile, TStr& OutFile,
  int& Dimensions, int& WalkLen, int& NumWalks, int& WinSize, int& Iter,
  bool& Verbose, double& ParamP, double& ParamQ, bool& Directed, bool& Weighted,
  bool& OutputWalks) {
@@ -14,6 +16,8 @@ void ParseArgs(int& argc, char* argv[], TStr& InFile, TStr& OutFile,
   Env.PrepArgs(TStr::Fmt("\nAn algorithmic framework for representational learning on graphs."));
   InFile = Env.GetIfArgPrefixStr("-i:", "graph/karate.edgelist",
    "Input graph path");
+  InGroupFile = Env.GetIfArgPrefixStr("-g:", "graph/karate.groups",
+   "Input groups");
   OutFile = Env.GetIfArgPrefixStr("-o:", "emb/karate.emb",
    "Output graph path");
   Dimensions = Env.GetIfArgPrefixInt("-d:", 128,
@@ -67,6 +71,32 @@ void ReadGraph(TStr& InFile, bool& Directed, bool& Weighted, bool& Verbose, PWNe
   }
 }
 
+void ReadGroups(TStr& InGroupFile, bool& Verbose, std::map<int, int>& Groups) {
+  TFIn FIn(InGroupFile);
+  int64 LineCnt = 0;
+  try {
+    while (!FIn.Eof()) {
+      TStr Ln;
+      FIn.GetNextLn(Ln);
+      TStr Line, Comment;
+      Ln.SplitOnCh(Line,'#',Comment);
+      TStrV Tokens;
+      Line.SplitOnWs(Tokens);
+      if(Tokens.Len()<2){ continue; }
+      int64 NId = Tokens[0].GetInt();
+      int64 GId = Tokens[1].GetInt();
+      Groups[NId] = GId;
+      LineCnt++;
+    }
+    if (Verbose) { printf("Read %lld lines from %s\n", (long long)LineCnt, InGroupFile.CStr()); }
+  } catch (PExcept Except) {
+    if (Verbose) {
+      printf("Read %lld lines from %s, then %s\n", (long long)LineCnt, InGroupFile.CStr(),
+       Except->GetStr().CStr());
+    }
+  }
+}
+
 void WriteOutput(TStr& OutFile, TIntFltVH& EmbeddingsHV, TVVec<TInt, int64>& WalksVV,
  bool& OutputWalks) {
   TFOut FOut(OutFile);
@@ -102,17 +132,19 @@ void WriteOutput(TStr& OutFile, TIntFltVH& EmbeddingsHV, TVVec<TInt, int64>& Wal
 }
 
 int main(int argc, char* argv[]) {
-  TStr InFile,OutFile;
+  TStr InFile,InGroupFile,OutFile;
   int Dimensions, WalkLen, NumWalks, WinSize, Iter;
   double ParamP, ParamQ;
   bool Directed, Weighted, Verbose, OutputWalks;
-  ParseArgs(argc, argv, InFile, OutFile, Dimensions, WalkLen, NumWalks, WinSize,
+  ParseArgs(argc, argv, InFile, InGroupFile, OutFile, Dimensions, WalkLen, NumWalks, WinSize,
    Iter, Verbose, ParamP, ParamQ, Directed, Weighted, OutputWalks);
   PWNet InNet = PWNet::New();
+  std::map<int,int> Groups;
   TIntFltVH EmbeddingsHV;
   TVVec <TInt, int64> WalksVV;
   ReadGraph(InFile, Directed, Weighted, Verbose, InNet);
-  node2vec(InNet, ParamP, ParamQ, Dimensions, WalkLen, NumWalks, WinSize, Iter, 
+  ReadGroups(InGroupFile, Verbose, Groups);
+  node2vecFair(InNet, Groups, ParamP, ParamQ, Dimensions, WalkLen, NumWalks, WinSize, Iter, 
    Verbose, OutputWalks, WalksVV, EmbeddingsHV);
   WriteOutput(OutFile, EmbeddingsHV, WalksVV, OutputWalks);
   return 0;

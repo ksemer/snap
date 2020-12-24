@@ -1,5 +1,6 @@
 #ifndef RAND_WALK_H
 #define RAND_WALK_H
+#include <map>
 
 typedef TNodeEDatNet<TIntIntVFltVPrH, TFlt> TWNet;
 typedef TPt<TWNet> PWNet;
@@ -9,6 +10,8 @@ void PreprocessTransitionProbs(PWNet& InNet, const double& ParamP, const double&
 
 ///Simulates one walk and writes it into Walk vector
 void SimulateWalk(PWNet& InNet, int64 StartNId, const int& WalkLen, TRnd& Rnd, TIntV& Walk);
+
+void SimulateFairWalk(PWNet& InNet, std::map<int,int>& Groups, int64 StartNId, const int& WalkLen, TRnd& Rnd, TIntV& Walk);
 
 //Predicts approximate memory required for preprocessing the graph
 int64 PredictMemoryRequirements(PWNet& InNet);

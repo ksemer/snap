@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "Snap.h"
 #include "biasedrandomwalk.h"
+#include <vector>
 
 //Preprocess alias sampling method
 void GetNodeAlias(TFltV& PTblV, TIntVFltVPr& NTTable) {
@@ -139,5 +140,43 @@ void SimulateWalk(PWNet& InNet, int64 StartNId, const int& WalkLen, TRnd& Rnd, T
     if (InNet->GetNI(Dst).GetOutDeg() == 0) { return; }
     int64 Next = AliasDrawInt(InNet->GetNDat(Dst).GetDat(Src),Rnd);
     WalkV.Add(InNet->GetNI(Dst).GetNbrNId(Next));
+  }
+}
+
+std::vector<int64> computeMembers(PWNet& InNet, std::map<int,int>& Groups, TRnd& Rnd, int64 NId) {
+  int group = Rnd.GetUniDevInt(2);
+  std::vector<int64> groupMembers;
+  for (int i = 0; i < InNet->GetNI(NId).GetOutDeg(); i++) {
+    int nbrID = InNet->GetNI(NId).GetNbrNId(i);
+    if (Groups[nbrID] == group)
+      groupMembers.push_back(nbrID);
+  }
+
+  return groupMembers;
+}
+
+void SimulateFairWalk(PWNet& InNet, std::map<int,int>& Groups, int64 StartNId, const int& WalkLen, TRnd& Rnd, TIntV& WalkV) {
+  WalkV.Add(StartNId);
+  if (WalkLen == 1) { return; }
+  if (InNet->GetNI(StartNId).GetOutDeg() == 0) { return; }
+  std::vector<int64> groupMembers = computeMembers(InNet, Groups, Rnd, StartNId);
+
+  if (groupMembers.size() > 0)
+    WalkV.Add(groupMembers[Rnd.GetUniDevInt(groupMembers.size())]);
+  else
+    WalkV.Add(InNet->GetNI(StartNId).GetNbrNId(Rnd.GetUniDevInt(InNet->GetNI(StartNId).GetOutDeg())));
+
+  while (WalkV.Len() < WalkLen) {
+    int64 Dst = WalkV.Last();
+    if (InNet->GetNI(Dst).GetOutDeg() == 0) { return; }
+
+    groupMembers = computeMembers(InNet, Groups, Rnd, Dst);
+
+    if (groupMembers.size() > 0)
+       WalkV.Add(groupMembers[Rnd.GetUniDevInt(groupMembers.size())]);
+    else {
+      int64 Next = InNet->GetNI(Dst).GetNbrNId(Rnd.GetUniDevInt(InNet->GetNI(Dst).GetOutDeg()));
+      WalkV.Add(InNet->GetNI(Dst).GetNbrNId(Next));
+    }
   }
 }
